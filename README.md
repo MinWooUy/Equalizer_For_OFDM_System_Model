@@ -149,6 +149,14 @@ W_{MMSE}[k]
 
 Với symbol dữ liệu được chuẩn hóa `sigma_x^2 = 1`, mẫu số trở thành `|H[k]|^2 + sigma_w^2`. MMSE chấp nhận một lượng sai lệch nhỏ để hạn chế khuếch đại nhiễu, do đó thường tốt hơn ZF ở SNR thấp và tại các subcarrier bị suy hao sâu.
 
+Hàm `mmse_equalizer` nhận tín hiệu sau FFT, kênh ước lượng, phương sai nhiễu AWGN và công suất trung bình symbol phát:
+
+```matlab
+X_est = mmse_equalizer(Y, H_est, noise_variance, symbol_variance);
+```
+
+Với QPSK chuẩn hóa công suất trung bình bằng 1, đặt `symbol_variance = 1`.
+
 ### 4.4. Ước lượng kênh LS bằng pilot (giai đoạn 2)
 
 Tại các vị trí pilot đã biết, ước lượng đáp ứng kênh bằng:
