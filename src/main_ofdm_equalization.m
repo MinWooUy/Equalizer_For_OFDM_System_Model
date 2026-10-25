@@ -43,7 +43,7 @@ Nnull = length(nullIndices); % số subcarrier null
 
 % Thông số kênh và nhiễu
 Lh = 10; % Số tap của kênh đa đường
-EbN0dB = 0:2:20; % Miền Eb/N0 cần khảo sát
+EbN0dB = 0:2:50; % Miền Eb/N0 cần khảo sát
 
 fprintf("------------------------- Bộ Phát(Tx) -------------------------");
 %% Bước 1: Sinh dữ liệu bit
@@ -125,11 +125,13 @@ end
 %% Bước 10.1: Giải ánh xạ và tính BER giai đoạn 1 không cân bằng
 BER_NoEQ = zeros(1, numEbN0Points);
 bitErrorsNoEQ = zeros(1, numEbN0Points);
+bitsRxNoEQAll = false(numel(bitsTx), numEbN0Points);
 
 for snrIndex = 1:numEbN0Points
     % Chỉ giải ánh xạ các subcarrier dữ liệu, không cân bằng kênh.
     receivedDataSymbols = Y_fft(dataIndices, :, snrIndex);
     bitsRx = qpsk_demodulate(receivedDataSymbols);
+    bitsRxNoEQAll(:, snrIndex) = bitsRx(:);
 
     % So sánh bit thu với bit phát để tính BER tại Eb/N0 hiện tại.
     bitErrorsNoEQ(snrIndex) = sum(bitsRx(:) ~= bitsTx(:));
@@ -143,12 +145,14 @@ disp(table(EbN0dB(:), bitErrorsNoEQ(:), BER_NoEQ(:), ...
 %% Bước 10.2: Cân bằng ZF, giải ánh xạ và tính BER
 BER_ZF = zeros(1, numEbN0Points);
 bitErrorsZF = zeros(1, numEbN0Points);
+bitsRxZFAll = false(numel(bitsTx), numEbN0Points);
 
 for snrIndex = 1:numEbN0Points
     % Cân bằng bằng H ước lượng, sau đó chỉ lấy các subcarrier dữ liệu.
     X_ZF = zf_equalizer(Y_fft(:, :, snrIndex), H_est(:, :, snrIndex));
     receivedDataSymbolsZF = X_ZF(dataIndices, :);
     bitsRxZF = qpsk_demodulate(receivedDataSymbolsZF);
+    bitsRxZFAll(:, snrIndex) = bitsRxZF(:);
 
     % Tính BER cho nhánh ZF tại Eb/N0 hiện tại.
     bitErrorsZF(snrIndex) = sum(bitsRxZF(:) ~= bitsTx(:));
@@ -162,6 +166,7 @@ disp(table(EbN0dB(:), bitErrorsZF(:), BER_ZF(:), ...
 %% Bước 10.3: Cân bằng MMSE, giải ánh xạ và tính BER
 BER_MMSE = zeros(1, numEbN0Points);
 bitErrorsMMSE = zeros(1, numEbN0Points);
+bitsRxMMSEAll = false(numel(bitsTx), numEbN0Points);
 symbolVariance = 1; % QPSK đã chuẩn hóa có công suất trung bình bằng 1.
 
 for snrIndex = 1:numEbN0Points
@@ -171,6 +176,7 @@ for snrIndex = 1:numEbN0Points
         noiseVarianceFrequencyByEbN0(snrIndex), symbolVariance);
     receivedDataSymbolsMMSE = X_MMSE(dataIndices, :);
     bitsRxMMSE = qpsk_demodulate(receivedDataSymbolsMMSE);
+    bitsRxMMSEAll(:, snrIndex) = bitsRxMMSE(:);
 
     % Tính BER cho nhánh MMSE tại Eb/N0 hiện tại.
     bitErrorsMMSE(snrIndex) = sum(bitsRxMMSE(:) ~= bitsTx(:));
@@ -370,6 +376,45 @@ xlabel('In-phase');
 ylabel('Quadrature');
 title(sprintf('Chòm sao sau kênh, trước cân bằng tại E_b/N_0 = %.1f dB', EbN0dB(snrIndexToPlot)));
 
+%% Hình 9: Chòm sao sau cân bằng ZF và MMSE
+YToEqualize = Y_fft(:, :, snrIndexToPlot);
+HEstToPlot = H_est(:, :, snrIndexToPlot);
+
+XZFToPlot = zf_equalizer(YToEqualize, HEstToPlot);
+dataSymbolsZFToPlot = XZFToPlot(dataIndices, :);
+vectorZFToPlot = dataSymbolsZFToPlot(:);
+numZFToPlot = min(3000, numel(vectorZFToPlot));
+
+XMMSEToPlot = mmse_equalizer( ...
+    YToEqualize, HEstToPlot, ...
+    noiseVarianceFrequencyByEbN0(snrIndexToPlot), symbolVariance);
+dataSymbolsMMSEToPlot = XMMSEToPlot(dataIndices, :);
+vectorMMSEToPlot = dataSymbolsMMSEToPlot(:);
+numMMSEToPlot = min(3000, numel(vectorMMSEToPlot));
+
+figure('Name', 'Chom sao sau can bang');
+tiledlayout(1, 2);
+
+nexttile;
+scatter(real(vectorZFToPlot(1:numZFToPlot)), ...
+    imag(vectorZFToPlot(1:numZFToPlot)), 10, 'filled');
+grid on;
+axis equal;
+xlabel('In-phase');
+ylabel('Quadrature');
+title(sprintf('Sau cân bằng ZF, E_b/N_0 = %.1f dB', ...
+    EbN0dB(snrIndexToPlot)));
+
+nexttile;
+scatter(real(vectorMMSEToPlot(1:numMMSEToPlot)), ...
+    imag(vectorMMSEToPlot(1:numMMSEToPlot)), 10, 'filled');
+grid on;
+axis equal;
+xlabel('In-phase');
+ylabel('Quadrature');
+title(sprintf('Sau cân bằng MMSE, E_b/N_0 = %.1f dB', ...
+    EbN0dB(snrIndexToPlot)));
+
 %% Đồ thị so sánh BER ba phương án thu
 figure('Name', 'So sanh BER OFDM');
 semilogy(EbN0dB, BER_NoEQ, 'o-', 'LineWidth', 1.5);
@@ -381,3 +426,41 @@ xlabel('E_b/N_0 (dB)');
 ylabel('BER');
 title('So sánh BER OFDM: không cân bằng, ZF và MMSE');
 legend('Không cân bằng', 'ZF', 'MMSE', 'Location', 'southwest');
+
+%% Hình cuối: So sánh chuỗi bit tại Eb/N0 = 10 dB và 20 dB
+numBitsToPlot = min(100, numel(bitsTx));
+bitIndicesToPlot = 1:numBitsToPlot;
+bitsTxToPlot = double(bitsTx(1:numBitsToPlot).');
+methodNames = {'Không cân bằng', 'ZF', 'MMSE'};
+EbN0BitPlots = [10 20];
+
+for plotIndex = 1:numel(EbN0BitPlots)
+    [~, bitPlotSNRIndex] = min(abs(EbN0dB - EbN0BitPlots(plotIndex)));
+    receivedBitSequences = {
+        bitsRxNoEQAll(1:numBitsToPlot, bitPlotSNRIndex), ...
+        bitsRxZFAll(1:numBitsToPlot, bitPlotSNRIndex), ...
+        bitsRxMMSEAll(1:numBitsToPlot, bitPlotSNRIndex)};
+
+    figure('Name', sprintf('So sanh bit tai EbN0 %d dB', ...
+        EbN0BitPlots(plotIndex)));
+    tiledlayout(3, 1);
+
+    for methodIndex = 1:numel(methodNames)
+        bitsReceivedToPlot = double(receivedBitSequences{methodIndex}(:).');
+        errorIndices = bitIndicesToPlot(bitsReceivedToPlot ~= bitsTxToPlot);
+
+        nexttile;
+        stairs(bitIndicesToPlot, bitsTxToPlot, 'k--', 'LineWidth', 1.0);
+        hold on;
+        stairs(bitIndicesToPlot, bitsReceivedToPlot, 'b-', 'LineWidth', 1.2);
+        plot(errorIndices, 1.15 * ones(size(errorIndices)), ...
+            'rx', 'LineWidth', 1.5, 'MarkerSize', 7);
+        grid on;
+        ylim([-0.2 1.3]);
+        xlabel('Chỉ số bit');
+        ylabel('Giá trị bit');
+        title(sprintf('Bit gốc và bit thu - %s, E_b/N_0 = %.1f dB', ...
+            methodNames{methodIndex}, EbN0dB(bitPlotSNRIndex)));
+        legend('Bit phát', 'Bit thu', 'Vị trí lỗi', 'Location', 'eastoutside');
+    end
+end
