@@ -1,0 +1,76 @@
+Lý do hệ thống OFDM cần cân bằng kênh?
+
+- loại bỏ sự méo dạng tín hiệu do kênh truyền gây ra, từ đó khôi phục lại dữ liệu gốc một cách chính xác.
+
+Đặc điểm OFDM?
+
+- Bản chất là nó phân chia và sắp xếp các sóng mang phụ thuộc vào miền tần số:
+	+ Trực giao: Các sóng mang phụ được sắp xếp sao cho đỉnh phổ của sóng mang này trùng đúng vào điểm bằng không (zero-crossing) của các sóng mang lân cận. Nhờ đó, chúng có thể xếp chồng vào nhau mà không gây nhiễu lẫn nhau (ICI)
+	+ Chia nhỏ băng thông: OFDM chia một kênh băng rộng có tốc độ dữ liệu cao thành nhiều kênh băng hẹp (sóng mang phụ) có tốc độ dữ liệu thấp.
+	+ Khoảng bảo vệ CP (Cyclic Prefix): Mỗi ký hiệu OFDM được chèn thêm một đoạn lặp lại ở đầu (gọi là khoảng bảo vệ). Đoạn này giúp hấp thụ các xung phản xạ đa đường, triệt tiêu hoàn toàn nhiễu ký hiệu (ISI).
+	+ Biến đổi Fourier nhanh (IFFT/FFT): Việc điều chế và giải điều chế hàng nghìn sóng mang phụ phức tạp được thực hiện cực kỳ đơn giản bằng các thuật toán xử lý tín hiệu số IFFT (Tx) và FFT (Rx).
+- Ưu điểm:
+	+ Hiệu suất sử dụng phổ cực cao: Nhờ đặc tính trực giao cho phép các sóng mang xếp chồng phổ lên nhau, OFDM tiết kiệm băng thông hơn rất nhiều so với kỹ thuật FDM (vốn cần khoảng hở băng thông lớn).
+	+ Chống chịu Fading đa đường và nhiễu ISI xuất sắc: Do tốc độ ký hiệu trên mỗi sóng mang phụ rất chậm, kết hợp với khoảng bảo vệ CP, OFDM hầu như miễn nhiệm với nhiễu liên ký hiệu (ISI) do truyền dẫn đa đường gây ra.
+	+ Bộ cân bằng kênh siêu đơn giản: OFDM biến kênh chọn lọc tần số thành các kênh fading phẳng. Rx chỉ cần bộ cân bằng một chạm (One-tap Equalizer) rất đơn giản để khôi phục tín hiệu, tiết kiệm năng lượng và chi phí phần cứng.
+	+ Linh hoạt trong quản lý tài nguyên: Hệ thống có thể dễ dàng cấp phát các sóng mang phụ khác nhau cho các người dùng khác nhau hoặc tắt bỏ các sóng mang phụ bị nhiễu nặng.
+- Nhược điểm:
+	+ Tỉ số công suất đỉnh trên công suất trung bình cao (PAPR lớn): Do tín hiệu OFDM là tổng của hàng nghìn sóng mang phụ có pha ngẫu nhiên, tại một số thời điểm, các sóng mang này cộng đỉnh pha với nhau tại ra một công suất đỉnh cực lơn. Đòi hỏi bộ khuếch đại công suất (PA) ở Tx phải có dải tuyến tính rất rộng và mắc tiền, nếu không sẽ gây méo tín hiệu.
+	+ Nhạy cảm với độ dịch tần số (Frequency shift): Nếu Tx và Rx không đồng bộ chính xác về tần số, hoặc do nhiều Doppler khi di chuyển tốc độ cao, tính trực giao sẽ bị phá vỡ. Lúc này, nhiễu liên sóng mang (ICI) sẽ xuất hiện và làm giảm mạnh chất lượng hệ thống.
+	+ Lãng phí băng thông do CP (Cyclic Prefix overhead): Việc chèn thêm khoảng bảo vệ CP giúp chống nhiễu ISI nhưng lại chiếm một phần băng thông hữu ích và tiêu tốn thêm năng lượng để truyền các bit lặp lại này.
+
+Bản chất méo do PAPR:
+	+ Khi tín hiệu OFDM có công suất định quá cao (PAPR lớn) vượt quá giới hạn chịu dựng của bộ khuếch đại công suất ở Tx, bộ PA sẽ bảo hòa. Nó cắt ngọn tín hiệu -> gây ra méo phi tuyến.
+	+ Khi méo phi tuyến ở Tx, các thành phần tần số mới bị sinh ra và các sóng mang phụ bị trộn lẫn vào nhau theo cách không thể đảo ngược. Bộ cân bằng không sửa được.
+	+ Cách giải quyết: Cắt lọc đỉnh (Clipping và Filtering), Mã hóa (Coding), Dịch pha (SLM/PTS),...
+
+Bộ cân bằng (hoạt động ở Rx):
+	+ Dựa trên nguyên lý tuyến tính (giả định kênh truyền là kênh tuyến tính).
+	+ Bộ cân bằng giải quyết méo tuyến tính do kênh truyền (Kênh đa đường, không gian môi trường) gây ra.
+	+ Trong không gian khi sóng truyền từ Anten phát -> Anten thu
+	+ Méo tuyến tính (Tín hiệu bị suy hao biên độ và bị xoay pha do phản xạ đa đường).
+	+ Dùng bộ cân bằng để Rx bù PHA/BIÊN ĐỘ.
+
+Vậy tại sao OFDM lại truyền đa đường?
+	+ Bản chất của truyền không dây là truyền đa đường nên OFDM thuộc nhóm này và không có quyền lựa chọn.
+	+ Khi anten máy phát ra sóng điện từ, các sóng không đi theo một đường thẳng duy nhất ở máy thu: Phản xạ, Tán xạ, Nhiễu xạ
+	+ Phản xạ: Đập vào các tòa nhà, mặt đường, núi non rồi nảy về phía Rx.
+	+ Tán xạ: Va chạm với cây cối, cột điện, biển hiệu và phân tán ra nhiều hướng.
+	+ Nhiễu xạ: Đi xuyên qua hoặc bo cong quanh các góc tường, cạnh tòa nhà.
+	--> Rx nhận được vô số bản sao của cùng một tín hiệu gốc, nhưng các bản sao này đến với các thời điểm khác nhau (do đi đường vòng xa hơn) với biên độ và pha khác nhau.
+	--> Hiện tượng này: Truyền dẫn đa đường.
+
+Vậy tại sao nhắc đến đa đường thì lại nhớ đến OFDM?
+	+ OFDM được sinh ra để biến hiện tượng đa đường (vốn là kẻ thù) thành môi trường có thể hoạt động hoàn hảo.
+	+ Với hệ thống sóng mang đơn thông thường: 
+		Khi truyền đa đường xảy ram các bản sao tín hiệu bị trễ sẽ đè lên ký hiệu tiếp theo, gây ra hiện tượng nhiễu liên ký hiệu (ISI).
+		Khi tốc độ cao ký hiệu truyền càng ngắn, nhiễu ISI sẽ phá hủy hoàn toàn tín hiệu. 
+		Rx cần những bộ cân bằng miền thời gian cực kỳ phức tạp, đắt tiền và tốn năng lượng mà vẫn khó sửa hết lỗi.
+	+ Với OFDM (Thay vì chống lại, chấp nhận thích nghi với đa đường) bằng 2 cách:
+		1. Kéo dài thời gian ký hiệu: OFDM chia nhỏ băng thông thành hàng nghìn sóng mang phụ tốc độ thấp. Vì tốc độ thấp nên thời gian tồn tại một ký hiệu trở nên rất dài. Khoảng thời gian trễ của các sóng đa đường trở nên quá nhỏ bé so với tốc độ dài ký hiệu này.
+		2. Khoảng bảo vệ CP: OFDM chèn thêm một khoảng thời gian trống (CP) ở đầu mỗi ký hiệu. Các sóng phản xạ đa đường đến muộn sẽ rơi hoàn toàn vào khoảng bảo vệ này và bị triệt tiêu, không gây nhiễu sang ký hiệu tiếp theo.
+ 
+Vậy bản chất kênh truyền không dây là tuyền tính sao? Hay chỉ đơn giản hóa?
+	+ Về bản chất tự nhiên là một hệ thống tuyến tính, nhưng trong thực tế, người ta thường giả định là tuyến tính và bất biến theo thời gian trong một khoảng thời gian nhất định để đơn giản hóa việc tính toán.
+	+ Bản chất vật lý:
+		Trong môi trường không khí tự nhiên, sóng điện từ tuân theo các hệ thức Maxwell và có tính chất xếp chồng
+			+ Nếu phát sóng A và B cùng lúc vào không gian, tại Rx, tín hiệu nhận được sẽ chính xác là A + B (Cộng thêm các bản sao phản xạ đa đường của chúng).
+			+ Khong gian tự nhiên không sinh ra các tần số mới, không làm méo phi truyến khi tín hiệu giống như tín hiệu đi qua một linh kiện điện tử.
+			--> Kênh truyền không dây là một hệ thống tuyến tính.
+	
+	--> Giả định kênh truyền bất biến trong một khoảnh khắc cực ngắn để Rx thu kịp tính toán và cân bằng tín hiệu.
+	--> Lúc này kênh truyền biến thành hệ thống LTI (Linear Time-Invariant)
+	--> Giả định này rút gọn toán học phức tạp thành phép nhân và phép chia ma trận đơn giản.
+
+Vậy để mô hình hóa hệ thống này bằng toán học, chúng ta cần những khối gì?
+	- Bộ phát: Nhận data và biến đổi thành tín hiệu chuẩn bị phát
+		+ Khối ánh xạ chòm sao.
+		+ Khối IFFT.
+		+ Khối chèn khoảng bảo vệ CP.
+	- Kênh truyền: mô hình hóa hiện tượng đa đường tự nhiên và nhiễu môi trường.
+		+ Mô hình kênh đa đường.
+		+ Tác động của kênh và nhiễu.
+	- Bộ thu:
+		+ Khối FFT
+		+ Khối loại bỏ CP
+		+ Khối cân bằng (Zero-Forcing, MMSE)
