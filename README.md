@@ -159,19 +159,20 @@ Với QPSK chuẩn hóa công suất trung bình bằng 1, đặt `symbol_varian
 
 ### 4.4. Ước lượng kênh LS bằng pilot (giai đoạn 2)
 
-Tại các vị trí pilot đã biết, ước lượng đáp ứng kênh bằng:
+Tại các vị trí pilot đã biết, trước hết tính ước lượng LS trên pilot:
 
 ```math
 \hat{H}_{LS}[k_p] = \frac{Y[k_p]}{X_p[k_p]}.
 ```
 
-Do pilot chỉ chiếm một số subcarrier, nội suy tuyến tính các giá trị LS để thu được `H_est` trên toàn bộ `NFFT` subcarrier. Hàm `estimate_channel_ls` nhận `Y`, giá trị pilot đã phát, chỉ số pilot theo thứ tự FFT MATLAB chưa dịch (`fft` output), và `NFFT`. Hàm đổi trục tần số sang thứ tự `fftshift` để nội suy theo thứ tự tần số, rồi đổi kết quả về thứ tự FFT ban đầu. Dùng `H_est` thay cho kênh thật trong bộ cân bằng.
+Với kênh có `L_h` tap, có thể ước lượng trực tiếp các tap trong miền trễ bằng bình phương tối thiểu:
 
 ```matlab
-H_est = estimate_channel_ls(Y, pilot_symbols, pilot_indices, NFFT);
+h_est = A \ Y_pilot;
+H_est = fft(h_est, NFFT, 1);
 ```
 
-`pilot_indices` phải là chỉ số MATLAB (từ 1 đến `NFFT`) ứng với các vị trí pilot trong `Y`; `pilot_symbols` chứa các giá trị pilot đã biết theo cùng thứ tự.
+Hàm `estimate_channel_ls_delay` tạo ma trận Fourier `A` từ `pilot_indices` và số tap `L_h`, rồi giải LS để lấy `h_est`. FFT của `h_est` tạo ra đáp ứng kênh trên toàn bộ subcarrier. Cần có ít nhất `L_h` pilot độc lập và ma trận pilot đủ hạng. Trong script mô phỏng, dùng 16 pilot cho kênh 10 tap; số pilot tăng lên đồng nghĩa số subcarrier dữ liệu giảm còn 36. Các chỉ số pilot MATLAB phải khớp với thứ tự FFT đầu ra và pilot đã phát.
 
 ## 5. Tham số mô phỏng ban đầu
 

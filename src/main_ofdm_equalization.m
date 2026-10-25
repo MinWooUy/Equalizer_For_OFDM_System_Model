@@ -32,10 +32,17 @@ numOfdmSymbols = 1000; % Số symbol OFDM mô phỏng
 bitsPerQpskSymbol = log2(M); % Số bit trên một Symbol QPSK
 
 % Thứ tự FFT gốc của MATLAB: DC nằm tại phần tử đầu tiên.
-dataIndices = [2:7 9:15 17:19 21:23 25:27 39 41:43 45:47 49:51 53:55 57:59 61:64];
-pilotIndices = [4 8 12 16 20 24 40 44 48 52 56 60];
+% <<<<<<< HEAD
+% dataIndices = [2:7 9:15 17:19 21:23 25:27 39 41:43 45:47 49:51 53:55 57:59 61:64];
+% pilotIndices = [4 8 12 16 20 24 40 44 48 52 56 60];
+% =======
+% >>>>>>> 5390aa06155f3a386f9d01fb9fc64f58fab17c67
 nullIndices = [1 28:38];
-pilotPattern = [1; -1; 1; 1];
+activeIndices = [2:27 39:64];
+pilotIndices = [2 5 9 12 16 19 22 26 40 44 47 50 54 57 61 64];
+dataIndices = setdiff(activeIndices, pilotIndices, 'stable');
+pilotPattern = [1; -1; 1; -1; 1; -1; 1; -1; ...
+                1; -1; 1; -1; 1; -1; 1; -1];
 
 Ndata = length(dataIndices); % số subcarrier dữ liệu
 Npilot = length(pilotIndices); % số subcarrier pilot
@@ -43,7 +50,7 @@ Nnull = length(nullIndices); % số subcarrier null
 
 % Thông số kênh và nhiễu
 Lh = 10; % Số tap của kênh đa đường
-EbN0dB = 0:2:50; % Miền Eb/N0 cần khảo sát
+EbN0dB = 0:2:20; % Miền Eb/N0 cần khảo sát
 
 fprintf("------------------------- Bộ Phát(Tx) -------------------------");
 %% Bước 1: Sinh dữ liệu bit
@@ -119,8 +126,8 @@ end
 H_est = zeros(NFFT, numOfdmSymbols, numEbN0Points);
 
 for snrIndex = 1:numEbN0Points
-    H_est(:, :, snrIndex) = estimate_channel_ls( ...
-        Y_fft(:, :, snrIndex), pilotPattern, pilotIndices, NFFT);
+    H_est(:, :, snrIndex) = estimate_channel_ls_delay( ...
+        Y_fft(:, :, snrIndex), pilotPattern, pilotIndices, NFFT, Lh);
 end
 
 %% Bước 10.1: Giải ánh xạ và tính BER giai đoạn 1 không cân bằng
@@ -501,6 +508,6 @@ for plotIndex = 1:numel(EbN0BitPlots)
         ylabel('Giá trị bit');
         title(sprintf('Bit gốc và bit thu - %s, E_b/N_0 = %.1f dB', ...
             methodNames{methodIndex}, EbN0dB(bitPlotSNRIndex)));
-        legend('Bit phát', 'Bit thu', 'Vị trí lỗi', 'Location', 'eastoutside');
+        legend('Bit phát', 'Bit thu', 'Location', 'eastoutside');
     end
 end
