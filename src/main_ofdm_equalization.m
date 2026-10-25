@@ -1,0 +1,107 @@
+%% Thông tin cho bộ thu
+
+% bitsTx: Bit gốc dùng để tính BER
+% dataSymbols: Symbol QPSK gốc
+% X: Symbol OFDM trong miền tấn số
+% x: Symbol OFDM trong miền thời gian trước CP
+% xCP / txSignal: Tín hiệu đi qua kênh truyền
+% dataIndices: Vị trí subcarrier dữ liệu
+% pilotIndices: Vị trí pilot
+% nullIndices: Vị trí guard và DC
+% pilotPattern: Các pilot mà bộ thu biết trước
+% rxBlocksByEbN0: Tín hiệu đầu vào bộ thu
+% HChannel Perfect CSI cho ZF/MMSE
+% noiseVarianceTimeByEbN0: Phương sai dùng để tạo AWGN miền thời gian
+% noiseVarianceFrequencyByEbN0: Phương sai dùng cho MMSE sau FFT
+% EbN0dB: Trục hoành đồ thị BER
+
+%% Bước 0: Khởi tạo tham số
+clear; close all; clc;
+
+% Thêm thư mục functions để script chạy được từ mọi thư mục hiện hành.
+srcPath = fileparts(mfilename('fullpath'));
+addpath(fullfile(srcPath, 'functions'));
+
+% Cố định bộ sinh số ngẫu nhiên để có thể lặp lại kết quả.
+rng(1);
+
+NFFT = 64; % Số điểm IFFT/FFT
+NCP = 16; % Độ dài Cyclic Prefix
+M = 4; % Bậc điều chế
+numOfdmSymbols = 1000; % Số symbol OFDM mô phỏng
+bitsPerQpskSymbol = log2(M); % Số bit trên một Symbol QPSK
+
+% Thứ tự FFT gốc của MATLAB: DC nằm tại phần tử đầu tiên.
+dataIndices = [2:7 9:21 23:27 39:43 45:57 59:64];
+pilotIndices = [8 22 44 58];
+nullIndices = [1 28:38];
+pilotPattern = [1; -1; 1; 1];
+
+Ndata = length(dataIndices); % số subcarrier dữ liệu
+Npilot = length(pilotIndices); % số subcarrier pilot
+Nnull = length(nullIndices); % số subcarrier null
+
+% Thông số kênh và nhiễu
+Lh = 10; % Số tap của kênh đa đường
+EbN0dB = 0:2:20; % Miền Eb/N0 cần khảo sát
+
+fprintf("------------------------- Bộ Phát(Tx) -------------------------");
+%% Bước 1: Sinh dữ liệu bit
+bitsTx = generate_ofdm_bits(Ndata, numOfdmSymbols, M);
+
+%% Bước 2: Mô hình bộ phát OFDM
+[txSignal, dataSymbols, X, x, xCP] = ofdm_transmitter(bitsTx, NFFT, NCP, dataIndices, pilotIndices, pilotPattern);
+
+fprintf("\n------------------------- Tạo kênh truyền -------------------------\n");
+%% Bước 3: Tạo kênh Rayleigh đa đường
+hChannel = sqrt(1/(2*Lh)) * (randn(Lh, numOfdmSymbols) + 1i*randn(Lh,numOfdmSymbols));
+
+% Giá trị trung bình của tổng công suất các tap phải gần bằng 1.
+averangeChannelPower = mean(sum(abs(hChannel).^2, 1));
+fprintf('Công suất kênh trung bình = %.6f\n', averangeChannelPower);
+
+%% Bước 4: Truyền từng symbol qua kênh
+samplesPerOfdmSymbol = NFFT + NCP;
+
+rxChannel = zeros(samplesPerOfdmSymbol, numOfdmSymbols);
+HChannel = zeros(NFFT, numOfdmSymbols);
+
+for symbolIndex = 1:numOfdmSymbols
+    h = hChannel(:, symbolIndex);
+
+    % Tích chập tuyến tính giữa symbol có CP và kênh đa đường
+    channelOutput = conv(xCP(:, symbolIndex), h);
+
+    % Giữ lại phần có dùng chiều dài với symbol phát
+    % Phần đuôi Lh - 1 mẫu không cho symbol đang xét
+    rxChannel(:, symbolIndex) = channelOutput(1:samplesPerOfdmSymbol);
+    HChannel(:, symbolIndex) = channel_frequency_response(h, NFFT); 
+end
+
+%% Bước 5: Tính năng lượng trên một bit
+totalTransmitEnergy = sum(abs(xCP(:)).^2);
+Eb = totalTransmitEnergy / length(bitsTx);
+
+fprintf('Năng lượng trung bình trên một bit Eb = %.6e\n', Eb);
+
+%% Bước 7: Cộng AWGN theo Eb/N0
+numEbN0Points = length(EbN0dB);
+
+%Lưu các tín hiệu thu để dùng cho bộ thu ở bước tiếp theo
+rxBlocksByEbN0 = zeros(samplesPerOfdmSymbol, numOfdmSymbols, numEbN0Points);
+
+noiseVarianceTimeByEbN0 = zeros(1, numEbN0Points);
+noiseVarianceFrequencyByEbN0 = zeros(1, numEbN0Points);
+
+for snrIndex = 1: numEbN0Points
+    EbN0Linear = 10^(EbN0dB(snrIndex)/10);
+
+    noiseVarianceTime = Eb / EbN0Linear;
+    noiseVarianceFrequencyByEbN0(snrIndex) = noiseVarianceTime;
+
+    noiseVarianceFrequencyByEbN0(snrIndex) = NFFT * noiseVarianceTime;
+
+    noise = sqrt(noiseVarianceTime/2) * (randn(size(rxChannel)) + 1i*randn(size(rxChannel)));
+    rxBlocksByEbN0(:, :, snrIndex) = rxChannel + noise;
+end
+
