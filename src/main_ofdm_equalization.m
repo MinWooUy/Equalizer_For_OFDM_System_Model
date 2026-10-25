@@ -57,8 +57,8 @@ fprintf("\n------------------------- Tạo kênh truyền ----------------------
 hChannel = sqrt(1/(2*Lh)) * (randn(Lh, numOfdmSymbols) + 1i*randn(Lh,numOfdmSymbols));
 
 % Giá trị trung bình của tổng công suất các tap phải gần bằng 1.
-averangeChannelPower = mean(sum(abs(hChannel).^2, 1));
-fprintf('Công suất kênh trung bình = %.6f\n', averangeChannelPower);
+averageChannelPower = mean(sum(abs(hChannel).^2, 1));
+fprintf('Công suất kênh trung bình = %.6f\n', averageChannelPower);
 
 %% Bước 4: Truyền từng symbol qua kênh
 samplesPerOfdmSymbol = NFFT + NCP;
@@ -97,7 +97,7 @@ for snrIndex = 1: numEbN0Points
     EbN0Linear = 10^(EbN0dB(snrIndex)/10);
 
     noiseVarianceTime = Eb / EbN0Linear;
-    noiseVarianceFrequencyByEbN0(snrIndex) = noiseVarianceTime;
+    noiseVarianceTimeByEbN0(snrIndex) = noiseVarianceTime;
 
     noiseVarianceFrequencyByEbN0(snrIndex) = NFFT * noiseVarianceTime;
 
@@ -105,3 +105,191 @@ for snrIndex = 1: numEbN0Points
     rxBlocksByEbN0(:, :, snrIndex) = rxChannel + noise;
 end
 
+%% Vẽ đồ thị
+symbolToPlot = 1;
+EbN0ToPlot = 10;
+
+[~, snrIndexToPlot] = min(abs(EbN0dB - EbN0ToPlot));
+rxBlocksToPlot = rxBlocksByEbN0(:, :, snrIndexToPlot);
+
+%% Hình 1: Chòm sao QPSK tại bộ phát
+qpskVector = dataSymbols(:);
+numQpskToPlot = min(2000, length(qpskVector));
+
+figure('Name', 'Chòm sao QPSK tại bộ phát');
+scatter(real(qpskVector(1:numQpskToPlot)), imag(qpskVector(1:numQpskToPlot)), 24, 'filled');
+grid on;
+axis equal;
+xlim([-1.2 1.2]);
+ylim([-1.2 1.2]);
+xlabel('In-phase');
+ylabel('Quadrature');
+title('Chòm sao QPSK tại bộ phát');
+
+%% Hình 2: Phân bố subcarrier
+subcarrierAxis = -NFFT/2:NFFT/2-1;
+Xcentered = fftshift(X, 1);
+
+dataMask = false(NFFT, 1);
+pilotMask = false(NFFT, 1);
+nullMask = false(NFFT, 1);
+
+dataMask(dataIndices) = true;
+pilotMask(pilotIndices) = true;
+nullMask(nullIndices) = true;
+
+dataMask = fftshift(dataMask);
+pilotMask = fftshift(pilotMask);
+nullMask = fftshift(nullMask);
+
+figure('Name', 'Phân bố subcarrier');
+
+stem(subcarrierAxis(dataMask), abs(Xcentered(dataMask, symbolToPlot)),'g', 'filled', 'LineWidth', 1.1);
+hold on;
+stem(subcarrierAxis(pilotMask), abs(Xcentered(pilotMask, symbolToPlot)), 'b', 'filled', 'LineWidth', 1.5);
+stem(subcarrierAxis(nullMask), abs(Xcentered(nullMask, symbolToPlot)), 'r', 'LineWidth', 1.0);
+
+grid on;
+xlim([-NFFT/2 NFFT/2-1]);
+xlabel('Chỉ số subcarrier k');
+ylabel('|X[k]|');
+title(sprintf( 'Phân bố subcarrier của symbol OFDM thứ %d', symbolToPlot));
+legend('Data', 'Pilot', 'Null/DC', 'Location', 'best');
+
+%% Hình 3: Symbol OFDM có CP
+xCpSelected = xCP(:, symbolToPlot);
+sampleAxisWithCP = -NCP:NFFT-1;
+
+figure('Name', 'Symbol OFDM có CP');
+
+plot(sampleAxisWithCP(1:NCP), real(xCpSelected(1:NCP)), 'r-o', 'LineWidth', 1.3, 'MarkerSize', 4);
+hold on;
+plot(sampleAxisWithCP(NCP+1:end), real(xCpSelected(NCP+1:end)), 'b-o', 'LineWidth', 1.0, 'MarkerSize', 3);
+xline(-0.5, 'k--', 'Ranh giới CP');
+grid on;
+xlabel('Chỉ số mẫu tương đối');
+ylabel('Phần thực');
+title('Symbol OFDM gồm CP và phần dữ liệu hữu ích');
+legend('Cyclic Prefix', 'NFFT mẫu hữu ích', 'Location', 'best');
+
+%% Hình 4: Phổ chuẩn hóa của tín hiệu phát
+nSpectrum = 8192;
+txSpectrum = fftshift(fft(txSignal, nSpectrum));
+txSpectrumDb = 20*log10(abs(txSpectrum) / max(abs(txSpectrum)) + eps);
+normalizedFrequency = (-nSpectrum/2:nSpectrum/2-1) / nSpectrum;
+
+figure('Name', 'Phổ tín hiệu OFDM');
+plot(normalizedFrequency, txSpectrumDb, 'LineWidth', 1.0);
+grid on;
+xlim([-0.5 0.5]);
+ylim([-80 5]);
+xlabel('Tần số chuẩn hóa f/F_s');
+ylabel('Biên độ chuẩn hóa (dB)');
+title('Phổ của chuỗi tín hiệu OFDM tại bộ phát');
+
+%% Hình bổ sung: Công suất tức thời và PAPR
+instantaneousPower = abs(x(:)).^2;
+averageTxPower = mean(instantaneousPower);
+peakTxPower = max(instantaneousPower);
+
+paprDb = 10*log10(peakTxPower/averageTxPower);
+
+numPowerSamplesToPlot = min(1000, length(x(:)));
+
+figure('Name', 'Công suất tức thời');
+plot(0:numPowerSamplesToPlot-1, instantaneousPower(1:numPowerSamplesToPlot), 'b', 'LineWidth', 1.0);
+hold on;
+yline(averageTxPower, 'r--', 'Công suất trung bình');
+grid on;
+xlabel('Chỉ số mẫu');
+ylabel('|x[n]|^2');
+title(sprintf('Công suất tức thời, PAPR = %.2f dB', paprDb));
+
+%% Hình 5: Đáp ứng xung của kênh đa đường
+hSelected = hChannel(:, symbolToPlot);
+tapAxis = 0:Lh-1;
+
+figure('Name', 'Đáp ứng xung kênh');
+tiledlayout(2, 1);
+
+nexttile;
+stem(tapAxis, abs(hSelected), 'filled', 'LineWidth', 1.2);
+grid on;
+xlabel('Chỉ số tap l');
+ylabel('|h[l]|');
+title('Biên độ đáp ứng xung kênh đa đường');
+
+nexttile;
+stem(tapAxis, angle(hSelected),'filled', 'LineWidth', 1.2);
+grid on;
+xlabel('Chỉ số tap l');
+ylabel('Pha (rad)');
+title('Pha của các tap kênh');
+
+%% Hình 6: Đáp ứng tần số của kênh
+HSelected = HChannel(:, symbolToPlot);
+HCentered = fftshift(HSelected);
+subcarrierAxis = -NFFT/2:NFFT/2-1;
+
+figure('Name', 'Đáp ứng tần số kênh');
+tiledlayout(2, 1);
+
+nexttile;
+plot(subcarrierAxis, 20*log10(abs(HCentered) + eps), 'b-o', 'LineWidth', 1.1, 'MarkerSize', 3);
+grid on;
+xlabel('Chỉ số subcarrier k');
+ylabel('|H[k]| (dB)');
+title('Đáp ứng biên độ của kênh');
+
+nexttile;
+plot(subcarrierAxis, unwrap(angle(HCentered)), 'r-o', 'LineWidth', 1.1, 'MarkerSize', 3);
+grid on;
+xlabel('Chỉ số subcarrier k');
+ylabel('Pha (rad)');
+title('Đáp ứng pha của kênh');
+
+%% Hình 7: So sánh trước và sau kênh
+txBlockSelected = xCP(:, symbolToPlot);
+rxChannelSelected = rxChannel(:, symbolToPlot);
+rxNoisySelected = rxBlocksToPlot(:, symbolToPlot);
+
+sampleAxis = 0:length(txBlockSelected)-1;
+
+figure('Name', 'Ảnh hưởng của kênh');
+tiledlayout(3, 1);
+
+nexttile;
+plot(sampleAxis, real(txBlockSelected), 'b', 'LineWidth', 1.0);
+grid on;
+ylabel('Re\{x_{CP}[n]\}');
+title('Tín hiệu phát');
+
+nexttile;
+plot(sampleAxis, real(rxChannelSelected), 'm', 'LineWidth', 1.0);
+grid on;
+ylabel('Re\{y[n]\}');
+title('Sau kênh đa đường, chưa có AWGN');
+
+nexttile;
+plot(sampleAxis, real(rxNoisySelected), 'r', 'LineWidth', 1.0);
+grid on;
+xlabel('Chỉ số mẫu');
+ylabel('Re\{r[n]\}');
+title(sprintf('Sau kênh và AWGN tại E_b/N_0 = %.1f dB', EbN0dB(snrIndexToPlot)));
+
+%% Hình 8: Chòm sao trước cân bằng
+rxNoCPToPlot = remove_cyclic_prefix(rxBlocksToPlot, NCP);
+
+YToPlot = ofdm_fft(rxNoCPToPlot, NFFT);
+receivedDataBeforeEqualization = YToPlot(dataIndices, :);
+
+receivedVector = receivedDataBeforeEqualization(:);
+numReceivedToPlot = min(3000, length(receivedVector));
+
+figure('Name', 'Chòm sao trước cân bằng');
+scatter(real(receivedVector(1:numReceivedToPlot)), imag(receivedVector(1:numReceivedToPlot)),10,'filled');
+grid on;
+axis equal;
+xlabel('In-phase');
+ylabel('Quadrature');
+title(sprintf('Chòm sao sau kênh, trước cân bằng tại E_b/N_0 = %.1f dB', EbN0dB(snrIndexToPlot)));
