@@ -32,8 +32,8 @@ numOfdmSymbols = 1000; % Số symbol OFDM mô phỏng
 bitsPerQpskSymbol = log2(M); % Số bit trên một Symbol QPSK
 
 % Thứ tự FFT gốc của MATLAB: DC nằm tại phần tử đầu tiên.
-dataIndices = [2:7 9:21 23:27 39:43 45:57 59:64];
-pilotIndices = [8 22 44 58];
+dataIndices = [2:7 9:15 17:19 21:23 25:27 39 41:43 45:47 49:51 53:55 57:59 61:64];
+pilotIndices = [4 8 12 16 20 24 40 44 48 52 56 60];
 nullIndices = [1 28:38];
 pilotPattern = [1; -1; 1; 1];
 
@@ -105,6 +105,7 @@ for snrIndex = 1: numEbN0Points
     rxBlocksByEbN0(:, :, snrIndex) = rxChannel + noise;
 end
 
+fprintf("------------------------- Bộ Thu(Rx) -------------------------")
 %% Bước 8: Bỏ CP và FFT cho từng giá trị Eb/N0
 Y_fft = zeros(NFFT, numOfdmSymbols, numEbN0Points);
 
@@ -186,6 +187,45 @@ end
 fprintf('\nBER giai đoạn 2 - cân bằng MMSE:\n');
 disp(table(EbN0dB(:), bitErrorsMMSE(:), BER_MMSE(:), ...
     'VariableNames', {'EbN0_dB', 'SoBitLoi', 'BER_MMSE'}));
+
+
+%% DEBUG: Kiem tra BER voi Perfect CSI
+BER_PerfectCSI = zeros(1, numEbN0Points);
+
+for snrIndex = 1:numEbN0Points
+
+    % Can bang voi dap ung kenh CHINH XAC
+    X_perfect = Y_fft(:,:,snrIndex) ./ HChannel;
+
+    % Chi lay cac subcarrier du lieu
+    dataPerfect = X_perfect(dataIndices,:);
+
+    % Giai dieu che QPSK
+    bitsPerfect = qpsk_demodulate(dataPerfect);
+
+    % Tinh BER
+    BER_PerfectCSI(snrIndex) = ...
+        sum(bitsPerfect(:) ~= bitsTx(:)) / numel(bitsTx);
+end
+
+% So sanh 4 phuong phap
+figure;
+semilogy(EbN0dB, max(BER_NoEQ, 1e-6), 'k-o'); hold on;
+semilogy(EbN0dB, max(BER_ZF, 1e-6), 'r-s');
+semilogy(EbN0dB, max(BER_MMSE, 1e-6), 'b-d');
+semilogy(EbN0dB, max(BER_PerfectCSI, 1e-6), 'g-^');
+
+grid on;
+xlabel('Eb/N0 (dB)');
+ylabel('BER');
+title('Kiem tra BER voi Perfect CSI');
+legend('No EQ','ZF-LS','MMSE-LS', ...
+       'Perfect CSI','Location','southwest');
+
+disp(table(EbN0dB(:), BER_ZF(:), ...
+    BER_MMSE(:), BER_PerfectCSI(:), ...
+    'VariableNames', ...
+    {'EbN0_dB','ZF','MMSE','PerfectCSI'}));
 
 %% Vẽ đồ thị
 symbolToPlot = 1;
