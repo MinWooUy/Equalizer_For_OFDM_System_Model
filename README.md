@@ -244,13 +244,22 @@ project/
 |   `-- spec.txt
 |-- src/
 |   |-- main_ofdm_equalization.m
-|   `-- functions/
-|       |-- qpsk_modulate.m
-|       |-- qpsk_demodulate.m
-|       |-- ofdm_modulate.m
-|       |-- ofdm_demodulate.m
-|       |-- generate_multipath_channel.m
-|       `-- apply_equalizer.m
+|   |-- functions/
+|   |   |-- generate_ofdm_bits.m
+|   |   |-- qpsk_modulate.m
+|   |   |-- map_ofdm_subcarriers.m
+|   |   |-- ofdm_ifft.m
+|   |   |-- add_cyclic_prefix.m
+|   |   |-- serialize_ofdm_symbols.m
+|   |   |-- ofdm_transmitter.m
+|   |   |-- remove_cyclic_prefix.m
+|   |   |-- ofdm_fft.m
+|   |   |-- qpsk_demodulate.m
+|   |   |-- channel_frequency_response.m
+|   |   |-- estimate_channel_ls.m
+|   |   `-- zf_equalizer.m
+|   `-- tests/
+|       `-- ex1.m
 |-- results/
 |   |-- figures/
 |   `-- data/
