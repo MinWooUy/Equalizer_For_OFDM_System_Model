@@ -23,14 +23,18 @@ Hiệu năng của ba phương án được đánh giá chủ yếu bằng BER t
 - So sánh công bằng ba trường hợp: không cân bằng, ZF và MMSE trên cùng dữ liệu, cùng hiện thực kênh và cùng mẫu nhiễu.
 - Giả sử phía thu biết chính xác đáp ứng kênh (perfect CSI) để tập trung đánh giá riêng ảnh hưởng của thuật toán cân bằng.
 
-### 2.2. Ngoài phạm vi bắt buộc
+### 2.2. Hướng mở rộng giai đoạn 2
 
-- Ước lượng kênh bằng pilot và nội suy.
+- Ước lượng kênh bằng pilot và nội suy thay cho perfect CSI.
+- So sánh ảnh hưởng của sai số ước lượng kênh lên BER sau cân bằng.
+
+### 2.3. Ngoài phạm vi
+
 - Sai lệch tần số sóng mang, sai lệch thời gian và ICI.
 - Mô hình bộ khuếch đại phi tuyến và PAPR reduction.
 - Mã hóa kênh, interleaving, MIMO và OFDMA.
 
-Các nội dung này chỉ được thực hiện sau khi mô hình bắt buộc đã chạy đúng và có thể được trình bày như hướng phát triển.
+Các nội dung này có thể được thực hiện sau khi mô hình bắt buộc đã chạy đúng.
 
 ## 3. Mô hình hệ thống
 
@@ -117,6 +121,21 @@ Xhat_ZF = Y .* conj(H) ./ (abs(H).^2 + eps);
 
 ZF khử méo tuyến tính của kênh nhưng có thể khuếch đại mạnh nhiễu tại các subcarrier bị deep fading.
 
+Hàm `zf_equalizer` nhận tín hiệu sau FFT `Y` và đáp ứng kênh ước lượng `H_est`:
+
+```matlab
+X_est = zf_equalizer(Y, H_est);
+```
+
+Sau cân bằng, lấy các hàng dữ liệu theo `data_indices` rồi giải ánh xạ QPSK Gray:
+
+```matlab
+data_symbols = X_est(data_indices, :);
+bits_est = qpsk_demodulate(data_symbols);
+```
+
+`bits_est` có `2 * số_subcarrier_dữ_liệu` hàng; mỗi cột là bit của một symbol OFDM, với từng cặp bit theo thứ tự Gray.
+
 ### 4.3. MMSE
 
 ```math
@@ -129,6 +148,22 @@ W_{MMSE}[k]
 ```
 
 Với symbol dữ liệu được chuẩn hóa `sigma_x^2 = 1`, mẫu số trở thành `|H[k]|^2 + sigma_w^2`. MMSE chấp nhận một lượng sai lệch nhỏ để hạn chế khuếch đại nhiễu, do đó thường tốt hơn ZF ở SNR thấp và tại các subcarrier bị suy hao sâu.
+
+### 4.4. Ước lượng kênh LS bằng pilot (giai đoạn 2)
+
+Tại các vị trí pilot đã biết, ước lượng đáp ứng kênh bằng:
+
+```math
+\hat{H}_{LS}[k_p] = \frac{Y[k_p]}{X_p[k_p]}.
+```
+
+Do pilot chỉ chiếm một số subcarrier, nội suy tuyến tính các giá trị LS để thu được `H_est` trên toàn bộ `NFFT` subcarrier. Hàm `estimate_channel_ls` nhận `Y`, giá trị pilot đã phát, chỉ số pilot theo thứ tự FFT MATLAB chưa dịch (`fft` output), và `NFFT`. Hàm đổi trục tần số sang thứ tự `fftshift` để nội suy theo thứ tự tần số, rồi đổi kết quả về thứ tự FFT ban đầu. Dùng `H_est` thay cho kênh thật trong bộ cân bằng.
+
+```matlab
+H_est = estimate_channel_ls(Y, pilot_symbols, pilot_indices, NFFT);
+```
+
+`pilot_indices` phải là chỉ số MATLAB (từ 1 đến `NFFT`) ứng với các vị trí pilot trong `Y`; `pilot_symbols` chứa các giá trị pilot đã biết theo cùng thứ tự.
 
 ## 5. Tham số mô phỏng ban đầu
 
@@ -243,4 +278,3 @@ Project được xem là hoàn thành khi:
 - Các hình BER, constellation và đáp ứng kênh.
 - Báo cáo Word/PDF.
 - Slide thuyết trình và chương trình demo.
-
