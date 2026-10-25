@@ -105,6 +105,82 @@ for snrIndex = 1: numEbN0Points
     rxBlocksByEbN0(:, :, snrIndex) = rxChannel + noise;
 end
 
+%% Bước 8: Bỏ CP và FFT cho từng giá trị Eb/N0
+Y_fft = zeros(NFFT, numOfdmSymbols, numEbN0Points);
+
+for snrIndex = 1:numEbN0Points
+    rx_no_cp = remove_cyclic_prefix( ...
+        rxBlocksByEbN0(:, :, snrIndex), NCP);
+    Y_fft(:, :, snrIndex) = ofdm_fft(rx_no_cp, NFFT);
+end
+
+%% Bước 9: Ước lượng kênh từ pilot cho nhánh cân bằng giai đoạn 2
+H_est = zeros(NFFT, numOfdmSymbols, numEbN0Points);
+
+for snrIndex = 1:numEbN0Points
+    H_est(:, :, snrIndex) = estimate_channel_ls( ...
+        Y_fft(:, :, snrIndex), pilotPattern, pilotIndices, NFFT);
+end
+
+%% Bước 10.1: Giải ánh xạ và tính BER giai đoạn 1 không cân bằng
+BER_NoEQ = zeros(1, numEbN0Points);
+bitErrorsNoEQ = zeros(1, numEbN0Points);
+
+for snrIndex = 1:numEbN0Points
+    % Chỉ giải ánh xạ các subcarrier dữ liệu, không cân bằng kênh.
+    receivedDataSymbols = Y_fft(dataIndices, :, snrIndex);
+    bitsRx = qpsk_demodulate(receivedDataSymbols);
+
+    % So sánh bit thu với bit phát để tính BER tại Eb/N0 hiện tại.
+    bitErrorsNoEQ(snrIndex) = sum(bitsRx(:) ~= bitsTx(:));
+    BER_NoEQ(snrIndex) = bitErrorsNoEQ(snrIndex) / numel(bitsTx);
+end
+
+fprintf('\nBER giai đoạn 1 - không cân bằng:\n');
+disp(table(EbN0dB(:), bitErrorsNoEQ(:), BER_NoEQ(:), ...
+    'VariableNames', {'EbN0_dB', 'SoBitLoi', 'BER_NoEQ'}));
+
+%% Bước 10.2: Cân bằng ZF, giải ánh xạ và tính BER
+BER_ZF = zeros(1, numEbN0Points);
+bitErrorsZF = zeros(1, numEbN0Points);
+
+for snrIndex = 1:numEbN0Points
+    % Cân bằng bằng H ước lượng, sau đó chỉ lấy các subcarrier dữ liệu.
+    X_ZF = zf_equalizer(Y_fft(:, :, snrIndex), H_est(:, :, snrIndex));
+    receivedDataSymbolsZF = X_ZF(dataIndices, :);
+    bitsRxZF = qpsk_demodulate(receivedDataSymbolsZF);
+
+    % Tính BER cho nhánh ZF tại Eb/N0 hiện tại.
+    bitErrorsZF(snrIndex) = sum(bitsRxZF(:) ~= bitsTx(:));
+    BER_ZF(snrIndex) = bitErrorsZF(snrIndex) / numel(bitsTx);
+end
+
+fprintf('\nBER giai đoạn 2 - cân bằng ZF:\n');
+disp(table(EbN0dB(:), bitErrorsZF(:), BER_ZF(:), ...
+    'VariableNames', {'EbN0_dB', 'SoBitLoi', 'BER_ZF'}));
+
+%% Bước 10.3: Cân bằng MMSE, giải ánh xạ và tính BER
+BER_MMSE = zeros(1, numEbN0Points);
+bitErrorsMMSE = zeros(1, numEbN0Points);
+symbolVariance = 1; % QPSK đã chuẩn hóa có công suất trung bình bằng 1.
+
+for snrIndex = 1:numEbN0Points
+    % Dùng phương sai nhiễu miền tần số sau FFT và kênh ước lượng LS.
+    X_MMSE = mmse_equalizer( ...
+        Y_fft(:, :, snrIndex), H_est(:, :, snrIndex), ...
+        noiseVarianceFrequencyByEbN0(snrIndex), symbolVariance);
+    receivedDataSymbolsMMSE = X_MMSE(dataIndices, :);
+    bitsRxMMSE = qpsk_demodulate(receivedDataSymbolsMMSE);
+
+    % Tính BER cho nhánh MMSE tại Eb/N0 hiện tại.
+    bitErrorsMMSE(snrIndex) = sum(bitsRxMMSE(:) ~= bitsTx(:));
+    BER_MMSE(snrIndex) = bitErrorsMMSE(snrIndex) / numel(bitsTx);
+end
+
+fprintf('\nBER giai đoạn 2 - cân bằng MMSE:\n');
+disp(table(EbN0dB(:), bitErrorsMMSE(:), BER_MMSE(:), ...
+    'VariableNames', {'EbN0_dB', 'SoBitLoi', 'BER_MMSE'}));
+
 %% Vẽ đồ thị
 symbolToPlot = 1;
 EbN0ToPlot = 10;
@@ -293,3 +369,15 @@ axis equal;
 xlabel('In-phase');
 ylabel('Quadrature');
 title(sprintf('Chòm sao sau kênh, trước cân bằng tại E_b/N_0 = %.1f dB', EbN0dB(snrIndexToPlot)));
+
+%% Đồ thị so sánh BER ba phương án thu
+figure('Name', 'So sanh BER OFDM');
+semilogy(EbN0dB, BER_NoEQ, 'o-', 'LineWidth', 1.5);
+hold on;
+semilogy(EbN0dB, BER_ZF, 's-', 'LineWidth', 1.5);
+semilogy(EbN0dB, BER_MMSE, 'd-', 'LineWidth', 1.5);
+grid on;
+xlabel('E_b/N_0 (dB)');
+ylabel('BER');
+title('So sánh BER OFDM: không cân bằng, ZF và MMSE');
+legend('Không cân bằng', 'ZF', 'MMSE', 'Location', 'southwest');
