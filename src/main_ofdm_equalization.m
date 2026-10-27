@@ -1,3 +1,4 @@
+clear;clc;
 %% Thông tin cho bộ thu
 
 % bitsTx: Bit gốc dùng để tính BER
@@ -22,13 +23,13 @@ clear; close all; clc;
 srcPath = fileparts(mfilename('fullpath'));
 addpath(fullfile(srcPath, 'functions'));
 
-% Cố định bộ sinh số ngẫu nhiên để có thể lặp lại kết quả.
-rng(1);
+% Khởi tạo bộ sinh số ngẫu nhiên khác nhau mỗi lần chạy.
+rng("shuffle");
 
 NFFT = 64; % Số điểm IFFT/FFT
 NCP = 16; % Độ dài Cyclic Prefix
 M = 4; % Bậc điều chế
-numOfdmSymbols = 1000; % Số symbol OFDM mô phỏng
+numOfdmSymbols = 2000; % Số symbol OFDM mô phỏng
 bitsPerQpskSymbol = log2(M); % Số bit trên một Symbol QPSK
 
 % Thứ tự FFT gốc của MATLAB: DC nằm tại phần tử đầu tiên.
@@ -195,7 +196,6 @@ fprintf('\nBER giai đoạn 2 - cân bằng MMSE:\n');
 disp(table(EbN0dB(:), bitErrorsMMSE(:), BER_MMSE(:), ...
     'VariableNames', {'EbN0_dB', 'SoBitLoi', 'BER_MMSE'}));
 
-
 %% DEBUG: Kiem tra BER voi Perfect CSI
 BER_PerfectCSI = zeros(1, numEbN0Points);
 
@@ -233,6 +233,56 @@ disp(table(EbN0dB(:), BER_ZF(:), ...
     BER_MMSE(:), BER_PerfectCSI(:), ...
     'VariableNames', ...
     {'EbN0_dB','ZF','MMSE','PerfectCSI'}));
+
+%% Tính BER với 8 pilot bằng nội suy đáp ứng tần số
+pilotIndices8 = pilotIndices(1:2:end);
+pilotPattern8 = pilotPattern(1:2:end);
+dataIndices8 = setdiff(activeIndices, pilotIndices8, 'stable');
+Ndata8 = length(dataIndices8);
+bitsTx8 = generate_ofdm_bits(Ndata8, numOfdmSymbols, M);
+
+[~, ~, ~, ~, xCP8] = ofdm_transmitter( ...
+    bitsTx8, NFFT, NCP, dataIndices8, pilotIndices8, pilotPattern8);
+
+rxChannel8 = zeros(samplesPerOfdmSymbol, numOfdmSymbols);
+for symbolIndex = 1:numOfdmSymbols
+    channelOutput8 = conv(xCP8(:, symbolIndex), hChannel(:, symbolIndex));
+    rxChannel8(:, symbolIndex) = channelOutput8(1:samplesPerOfdmSymbol);
+end
+
+Eb8 = sum(abs(xCP8(:)).^2) / numel(bitsTx8);
+BER_ZF_8Pilot = zeros(1, numEbN0Points);
+BER_MMSE_8Pilot = zeros(1, numEbN0Points);
+interpolationIndices = [pilotIndices8 - NFFT, pilotIndices8, ...
+    pilotIndices8 + NFFT];
+interpolationIndices = interpolationIndices(:);
+
+for snrIndex = 1:numEbN0Points
+    noiseVarianceTime8 = Eb8 / 10^(EbN0dB(snrIndex)/10);
+    noise8 = sqrt(noiseVarianceTime8/2) * ...
+        (randn(size(rxChannel8)) + 1i*randn(size(rxChannel8)));
+    rxNoisy8 = rxChannel8 + noise8;
+    rxNoCP8 = remove_cyclic_prefix(rxNoisy8, NCP);
+    Y_fft8 = ofdm_fft(rxNoCP8, NFFT);
+
+    pilotResponse8 = Y_fft8(pilotIndices8, :) ./ pilotPattern8(:);
+    H_est8 = interp1( ...
+        interpolationIndices, ...
+        [pilotResponse8; pilotResponse8; pilotResponse8], ...
+        (1:NFFT).', 'linear');
+
+    X_ZF_8Pilot = zf_equalizer(Y_fft8, H_est8);
+    bitsRxZF8 = qpsk_demodulate(X_ZF_8Pilot(dataIndices8, :));
+    BER_ZF_8Pilot(snrIndex) = ...
+        sum(bitsRxZF8(:) ~= bitsTx8(:)) / numel(bitsTx8);
+
+    noiseVarianceFrequency8 = NFFT * noiseVarianceTime8;
+    X_MMSE_8Pilot = mmse_equalizer( ...
+        Y_fft8, H_est8, noiseVarianceFrequency8, symbolVariance);
+    bitsRxMMSE8 = qpsk_demodulate(X_MMSE_8Pilot(dataIndices8, :));
+    BER_MMSE_8Pilot(snrIndex) = ...
+        sum(bitsRxMMSE8(:) ~= bitsTx8(:)) / numel(bitsTx8);
+end
 
 %% Vẽ đồ thị
 symbolToPlot = 1;
@@ -358,22 +408,24 @@ title('Pha của các tap kênh');
 %% Hình 6: Đáp ứng tần số của kênh
 HSelected = HChannel(:, symbolToPlot);
 HCentered = fftshift(HSelected);
-subcarrierAxis = -NFFT/2:NFFT/2-1;
+normalizedFrequency = (-NFFT/2:NFFT/2-1) / NFFT;
 
 figure('Name', 'Đáp ứng tần số kênh');
 tiledlayout(2, 1);
 
 nexttile;
-plot(subcarrierAxis, 20*log10(abs(HCentered) + eps), 'b-o', 'LineWidth', 1.1, 'MarkerSize', 3);
+plot(normalizedFrequency, 20*log10(abs(HCentered) + eps), ...
+    'b-o', 'LineWidth', 1.1, 'MarkerSize', 3);
 grid on;
-xlabel('Chỉ số subcarrier k');
-ylabel('|H[k]| (dB)');
+xlabel('Tần số chuẩn hóa f/F_s');
+ylabel('|H(f)| (dB)');
 title('Đáp ứng biên độ của kênh');
 
 nexttile;
-plot(subcarrierAxis, unwrap(angle(HCentered)), 'r-o', 'LineWidth', 1.1, 'MarkerSize', 3);
+plot(normalizedFrequency, unwrap(angle(HCentered)), ...
+    'r-o', 'LineWidth', 1.1, 'MarkerSize', 3);
 grid on;
-xlabel('Chỉ số subcarrier k');
+xlabel('Tần số chuẩn hóa f/F_s');
 ylabel('Pha (rad)');
 title('Đáp ứng pha của kênh');
 
@@ -473,6 +525,20 @@ xlabel('E_b/N_0 (dB)');
 ylabel('BER');
 title('So sánh BER OFDM: không cân bằng, ZF và MMSE');
 legend('Không cân bằng', 'ZF', 'MMSE', 'Location', 'southwest');
+
+%% Hình bổ sung: So sánh BER với 8 và 16 pilot
+figure('Name', 'So sánh BER 8 pilot và 16 pilot');
+semilogy(EbN0dB, BER_ZF, 'bo-', 'LineWidth', 1.5);
+hold on;
+semilogy(EbN0dB, BER_MMSE, 'bs-', 'LineWidth', 1.5);
+semilogy(EbN0dB, BER_ZF_8Pilot, 'r^-', 'LineWidth', 1.5);
+semilogy(EbN0dB, BER_MMSE_8Pilot, 'rd-', 'LineWidth', 1.5);
+grid on;
+xlabel('E_b/N_0 (dB)');
+ylabel('BER');
+title('So sánh BER với 8 pilot và 16 pilot');
+legend('ZF - 16 pilot', 'MMSE - 16 pilot', ...
+    'ZF - 8 pilot', 'MMSE - 8 pilot', 'Location', 'southwest');
 
 %% Hình cuối: So sánh chuỗi bit tại Eb/N0 = 10 dB và 20 dB
 numBitsToPlot = min(100, numel(bitsTx));
