@@ -10,7 +10,7 @@ NFFT = 64;
 NCP = 16;
 M = 4;
 numOfdmSymbols = 2000;
-Lh = 10;                            % Số tap kênh, cần Np >= Lh
+Lh = 10;                            % Số tap kênh đa đường
 EbN0dB = 0:2:20;
 activeIndices = [2:27 39:64];       % 52 sóng mang active, giống chương trình chính
 NpList = [10 12 16 20 26];          % Các số pilot cần khảo sát
@@ -28,7 +28,6 @@ BER = zeros(numel(NpList), numel(EbN0dB));
 
 for iNp = 1:numel(NpList)
     Np = NpList(iNp);
-    assert(Np >= Lh, 'Số pilot phải lớn hơn hoặc bằng số tap kênh');
     rng(1);                         % Cùng chuỗi ngẫu nhiên cho mọi Np để so sánh công bằng
 
     % Rải đều Np pilot trên 52 sóng mang active
@@ -63,7 +62,7 @@ for iNp = 1:numel(NpList)
         N0 = Eb / 10^(EbN0dB(s)/10);
         rx = rxChannel + sqrt(N0/2) * (randn(size(rxChannel)) + 1i*randn(size(rxChannel)));
         Y = ofdm_fft(remove_cyclic_prefix(rx, NCP), NFFT);
-        H_est = estimate_channel_ls_delay(Y, pilotPattern, pilotIndices, NFFT, Lh);
+        H_est = estimate_channel_ls(Y, pilotPattern, pilotIndices, NFFT);
         X_ZF = zf_equalizer(Y, H_est);
         bitsRx = qpsk_demodulate(X_ZF(dataIndices, :));
         BER(iNp, s) = mean(bitsRx(:) ~= bitsTx(:));

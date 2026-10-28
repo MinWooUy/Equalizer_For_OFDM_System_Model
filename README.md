@@ -165,14 +165,14 @@ Tại các vị trí pilot đã biết, trước hết tính ước lượng LS 
 \hat{H}_{LS}[k_p] = \frac{Y[k_p]}{X_p[k_p]}.
 ```
 
-Với kênh có `L_h` tap, có thể ước lượng trực tiếp các tap trong miền trễ bằng bình phương tối thiểu:
+Sau khi có các ước lượng tại pilot, nội suy tuyến tính theo tần số để tìm đáp ứng kênh trên toàn bộ các subcarrier:
 
 ```matlab
-h_est = A \ Y_pilot;
-H_est = fft(h_est, NFFT, 1);
+H_pilot = Y(pilot_indices, :) ./ pilot_symbols(:);
+H_est = estimate_channel_ls(Y, pilot_symbols, pilot_indices, NFFT);
 ```
 
-Hàm `estimate_channel_ls_delay` tạo ma trận Fourier `A` từ `pilot_indices` và số tap `L_h`, rồi giải LS để lấy `h_est`. FFT của `h_est` tạo ra đáp ứng kênh trên toàn bộ subcarrier. Cần có ít nhất `L_h` pilot độc lập và ma trận pilot đủ hạng. Trong script mô phỏng, dùng 16 pilot cho kênh 10 tap; số pilot tăng lên đồng nghĩa số subcarrier dữ liệu giảm còn 36. Các chỉ số pilot MATLAB phải khớp với thứ tự FFT đầu ra và pilot đã phát.
+Hàm `estimate_channel_ls` sắp xếp pilot theo thứ tự tần số sau `fftshift`, nội suy tuyến tính có tính tuần hoàn qua biên phổ, rồi khôi phục thứ tự FFT ban đầu. Vì vậy, phương pháp này không cần số pilot phải lớn hơn hoặc bằng số tap kênh; cần ít nhất hai pilot ở các vị trí tần số khác nhau để nội suy. `estimate_channel_ls_delay` vẫn có thể dùng như phương pháp thay thế: hàm ước lượng các tap trong miền trễ rồi lấy FFT.
 
 ## 5. Tham số mô phỏng ban đầu
 

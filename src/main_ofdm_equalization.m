@@ -127,8 +127,8 @@ end
 H_est = zeros(NFFT, numOfdmSymbols, numEbN0Points);
 
 for snrIndex = 1:numEbN0Points
-    H_est(:, :, snrIndex) = estimate_channel_ls_delay( ...
-        Y_fft(:, :, snrIndex), pilotPattern, pilotIndices, NFFT, Lh);
+    H_est(:, :, snrIndex) = estimate_channel_ls( ...
+        Y_fft(:, :, snrIndex), pilotPattern, pilotIndices, NFFT);
 end
 
 %% Bước 10.1: Giải ánh xạ và tính BER giai đoạn 1 không cân bằng
