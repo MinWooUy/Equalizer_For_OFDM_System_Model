@@ -5,7 +5,7 @@ function H_est = estimate_channel_ls(Y, pilot_symbols, pilot_indices, NFFT)
 % Tính ước lượng LS tại các vị trí pilot.
 H_pilot = estimate_pilot_channel_ls(Y, pilot_symbols, pilot_indices);
 
-% Sắp xếp vị trí và giá trị pilot theo thứ tự tần số đã fftshift.
+% Sắp xếp vị trí và giá trị H_pilot theo thứ tự tần số đã fftshift.
 [centered_indices, H_pilot] = sort_pilots_by_frequency( ...
     pilot_indices, H_pilot, NFFT);
 
